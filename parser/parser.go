@@ -2,7 +2,6 @@ package parser
 
 import (
 	"fmt"
-	"log"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
@@ -13,22 +12,26 @@ import (
 )
 
 // GetDoc return Document object of the HTML string
-func GetDoc(html string) *goquery.Document {
+func GetDoc(html string) (*goquery.Document, error) {
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
-	return doc
+	return doc, nil
 }
 
 // GetImages find the img with a given class name
 func GetImages(
 	url, html, imgClass string, urlHandler func(string) string,
-) (string, []downloader.URLData) {
-	doc := GetDoc(html)
+) (string, []downloader.URL, error) {
+	var err error
+	doc, err := GetDoc(html)
+	if err != nil {
+		return "", nil, err
+	}
 	title := Title(doc)
-	urls := []downloader.URLData{}
-	urlData := downloader.URLData{}
+	urls := make([]downloader.URL, 0)
+	urlData := downloader.URL{}
 	doc.Find(fmt.Sprintf("img[class=\"%s\"]", imgClass)).Each(
 		func(i int, s *goquery.Selection) {
 			urlData.URL, _ = s.Attr("src")
@@ -36,12 +39,21 @@ func GetImages(
 				// Handle URL as needed
 				urlData.URL = urlHandler(urlData.URL)
 			}
-			urlData.Size = request.Size(urlData.URL, url)
-			_, urlData.Ext = utils.GetNameAndExt(urlData.URL)
+			urlData.Size, err = request.Size(urlData.URL, url)
+			if err != nil {
+				return
+			}
+			_, urlData.Ext, err = utils.GetNameAndExt(urlData.URL)
+			if err != nil {
+				return
+			}
 			urls = append(urls, urlData)
 		},
 	)
-	return title, urls
+	if err != nil {
+		return "", nil, err
+	}
+	return title, urls, nil
 }
 
 // Title get title
@@ -57,5 +69,5 @@ func Title(doc *goquery.Document) string {
 	if title == "" {
 		title = doc.Find("title").Text()
 	}
-	return utils.FileName(title)
+	return title
 }

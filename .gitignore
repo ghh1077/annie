@@ -10,11 +10,22 @@
 
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
+coverage.txt
 
 # Python
 *.pyc
 
 .vscode
+.idea
 dist/
-github_token
-.github_token
+*_token
+downloader/*.jpg
+
+# Ignore compiled binaries
+# - native
+annie
+# - gox builds
+annie_*
+
+# macOS
+.DS_Store

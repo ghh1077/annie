@@ -4,13 +4,36 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
-	"log"
+	"io/ioutil"
 	"net/url"
 	"os"
+	"strings"
+
+	"github.com/fatih/color"
 
 	"github.com/iawia002/annie/config"
-	"github.com/iawia002/annie/extractors"
+	"github.com/iawia002/annie/downloader"
+	"github.com/iawia002/annie/extractors/bcy"
 	"github.com/iawia002/annie/extractors/bilibili"
+	"github.com/iawia002/annie/extractors/douyin"
+	"github.com/iawia002/annie/extractors/douyu"
+	"github.com/iawia002/annie/extractors/facebook"
+	"github.com/iawia002/annie/extractors/geekbang"
+	"github.com/iawia002/annie/extractors/instagram"
+	"github.com/iawia002/annie/extractors/iqiyi"
+	"github.com/iawia002/annie/extractors/mgtv"
+	"github.com/iawia002/annie/extractors/miaopai"
+	"github.com/iawia002/annie/extractors/netease"
+	"github.com/iawia002/annie/extractors/pixivision"
+	"github.com/iawia002/annie/extractors/pornhub"
+	"github.com/iawia002/annie/extractors/qq"
+	"github.com/iawia002/annie/extractors/tumblr"
+	"github.com/iawia002/annie/extractors/twitter"
+	"github.com/iawia002/annie/extractors/universal"
+	"github.com/iawia002/annie/extractors/vimeo"
+	"github.com/iawia002/annie/extractors/weibo"
+	"github.com/iawia002/annie/extractors/yinyuetai"
+	"github.com/iawia002/annie/extractors/youku"
 	"github.com/iawia002/annie/extractors/youtube"
 	"github.com/iawia002/annie/utils"
 )
@@ -24,11 +47,18 @@ func init() {
 	flag.StringVar(&config.Refer, "r", "", "Use specified Referrer")
 	flag.StringVar(&config.Proxy, "x", "", "HTTP proxy")
 	flag.StringVar(&config.Socks5Proxy, "s", "", "SOCKS5 proxy")
-	flag.StringVar(&config.Format, "f", "", "Select specific format to download")
+	flag.StringVar(&config.Stream, "f", "", "Select specific stream to download")
 	flag.StringVar(&config.OutputPath, "o", "", "Specify the output path")
 	flag.StringVar(&config.OutputName, "O", "", "Specify the output file name")
 	flag.BoolVar(&config.ExtractedData, "j", false, "Print extracted data")
-	flag.IntVar(&config.ThreadNumber, "n", 10, "The number of download thread (only works for multiple-parts video)")
+	flag.IntVar(&config.ChunkSizeMB, "cs", 0, "HTTP chunk size for downloading (in MB)")
+	flag.BoolVar(&config.UseAria2RPC, "aria2", false, "Use Aria2 RPC to download")
+	flag.StringVar(&config.Aria2Token, "aria2token", "", "Aria2 RPC Token")
+	flag.StringVar(&config.Aria2Addr, "aria2addr", "localhost:6800", "Aria2 Address")
+	flag.StringVar(&config.Aria2Method, "aria2method", "http", "Aria2 Method")
+	flag.IntVar(
+		&config.ThreadNumber, "n", 10, "The number of download thread (only works for multiple-parts video)",
+	)
 	flag.StringVar(&config.File, "F", "", "URLs file path")
 	flag.IntVar(&config.PlaylistStart, "start", 1, "Playlist video to start at")
 	flag.IntVar(&config.PlaylistEnd, "end", 0, "Playlist video to end at")
@@ -37,14 +67,35 @@ func init() {
 		"Playlist video items to download. Separated by commas like: 1,5,6",
 	)
 	flag.BoolVar(&config.Caption, "C", false, "Download captions")
-	flag.StringVar(&config.Ccode, "ccode", "0808", "Youku ccode")
 	flag.IntVar(
-		&config.RetryTimes, "retry", 100, "How many times to retry when the download failed",
+		&config.RetryTimes, "retry", 10, "How many times to retry when the download failed",
+	)
+	// youku
+	flag.StringVar(&config.YoukuCcode, "ccode", "0590", "Youku ccode")
+	flag.StringVar(
+		&config.YoukuCkey,
+		"ckey",
+		"7B19C0AB12633B22E7FE81271162026020570708D6CC189E4924503C49D243A0DE6CD84A766832C2C99898FC5ED31F3709BB3CDD82C96492E721BDD381735026",
+		"Youku ckey",
+	)
+	flag.StringVar(&config.YoukuPassword, "password", "", "Youku password")
+	// youtube
+	flag.BoolVar(&config.YouTubeStream2, "ytb-stream2", false, "Use data in url_encoded_fmt_stream_map")
+}
+
+func printError(url string, err error) {
+	fmt.Printf(
+		"Downloading %s error:\n%s\n",
+		color.CyanString("%s", url), color.RedString("%v", err),
 	)
 }
 
-func download(videoURL string) {
-	var domain string
+func download(videoURL string) bool {
+	var (
+		domain string
+		err    error
+		data   []downloader.Data
+	)
 	bilibiliShortLink := utils.MatchOneOf(videoURL, `^(av|ep)\d+`)
 	if bilibiliShortLink != nil {
 		bilibiliURL := map[string]string{
@@ -56,50 +107,79 @@ func download(videoURL string) {
 	} else {
 		u, err := url.ParseRequestURI(videoURL)
 		if err != nil {
-			log.Fatal(err)
+			printError(videoURL, err)
+			return true
 		}
 		domain = utils.Domain(u.Host)
 	}
 	switch domain {
 	case "douyin", "iesdouyin":
-		extractors.Douyin(videoURL)
+		data, err = douyin.Extract(videoURL)
 	case "bilibili":
-		bilibili.Download(videoURL)
+		data, err = bilibili.Extract(videoURL)
 	case "bcy":
-		extractors.Bcy(videoURL)
+		data, err = bcy.Extract(videoURL)
 	case "pixivision":
-		extractors.Pixivision(videoURL)
+		data, err = pixivision.Extract(videoURL)
 	case "youku":
-		extractors.Youku(videoURL)
+		data, err = youku.Extract(videoURL)
 	case "youtube", "youtu": // youtu.be
-		youtube.Download(videoURL)
+		data, err = youtube.Extract(videoURL)
 	case "iqiyi":
-		extractors.Iqiyi(videoURL)
+		data, err = iqiyi.Extract(videoURL)
 	case "mgtv":
-		extractors.Mgtv(videoURL)
+		data, err = mgtv.Extract(videoURL)
 	case "tumblr":
-		extractors.Tumblr(videoURL)
+		data, err = tumblr.Extract(videoURL)
 	case "vimeo":
-		extractors.Vimeo(videoURL)
+		data, err = vimeo.Extract(videoURL)
 	case "facebook":
-		extractors.Facebook(videoURL)
+		data, err = facebook.Extract(videoURL)
 	case "douyu":
-		extractors.Douyu(videoURL)
+		data, err = douyu.Extract(videoURL)
 	case "miaopai":
-		extractors.Miaopai(videoURL)
+		data, err = miaopai.Extract(videoURL)
+	case "163":
+		data, err = netease.Extract(videoURL)
 	case "weibo":
-		extractors.Weibo(videoURL)
+		data, err = weibo.Extract(videoURL)
 	case "instagram":
-		extractors.Instagram(videoURL)
+		data, err = instagram.Extract(videoURL)
 	case "twitter":
-		extractors.Twitter(videoURL)
+		data, err = twitter.Extract(videoURL)
 	case "qq":
-		extractors.QQ(videoURL)
-	case "le":
-		extractors.Le(videoURL)
+		data, err = qq.Extract(videoURL)
+	case "yinyuetai":
+		data, err = yinyuetai.Extract(videoURL)
+	case "geekbang":
+		data, err = geekbang.Extract(videoURL)
+	case "pornhub":
+		data, err = pornhub.Extract(videoURL)
 	default:
-		extractors.Universal(videoURL)
+		data, err = universal.Extract(videoURL)
 	}
+	if err != nil {
+		// if this error occurs, it means that an error occurred before actually starting to extract data
+		// (there is an error in the preparation step), and the data list is empty.
+		printError(videoURL, err)
+		return true
+	}
+	var isErr bool
+	for _, item := range data {
+		if item.Err != nil {
+			// if this error occurs, the preparation step is normal, but the data extraction is wrong.
+			// the data is an empty struct.
+			printError(item.URL, item.Err)
+			isErr = true
+			continue
+		}
+		err = downloader.Download(item, videoURL, config.ChunkSizeMB)
+		if err != nil {
+			printError(item.URL, err)
+			isErr = true
+		}
+	}
+	return isErr
 }
 
 func main() {
@@ -113,17 +193,20 @@ func main() {
 		utils.PrintVersion()
 	}
 	if config.File != "" {
+		// read URL list from file
 		file, err := os.Open(config.File)
 		if err != nil {
-			log.Fatal(err)
+			fmt.Println(err)
+			return
 		}
 		defer file.Close()
 		scanner := bufio.NewScanner(file)
 		for scanner.Scan() {
-			if scanner.Text() == "" {
+			universalURL := strings.TrimSpace(scanner.Text())
+			if universalURL == "" {
 				continue
 			}
-			args = append(args, scanner.Text())
+			args = append(args, universalURL)
 		}
 	}
 	if len(args) < 1 {
@@ -132,7 +215,26 @@ func main() {
 		flag.PrintDefaults()
 		return
 	}
+	if config.Cookie != "" {
+		// If config.Cookie is a file path, convert it to a string to ensure
+		// config.Cookie is always string
+		if _, fileErr := os.Stat(config.Cookie); fileErr == nil {
+			// Cookie is a file
+			data, err := ioutil.ReadFile(config.Cookie)
+			if err != nil {
+				color.Red("%v", err)
+				return
+			}
+			config.Cookie = string(data)
+		}
+	}
+	var isErr bool
 	for _, videoURL := range args {
-		download(videoURL)
+		if err := download(strings.TrimSpace(videoURL)); err {
+			isErr = true
+		}
+	}
+	if isErr {
+		os.Exit(1)
 	}
 }

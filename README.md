@@ -87,6 +87,17 @@ For Void linux users, you can install `annie` via:
 $ xbps-install -S annie
 ```
 
+### [Scoop](https://scoop.sh/) on Windows
+
+```sh
+$ scoop install annie
+```
+
+### [Chocolatey](https://chocolatey.org/) on Windows
+
+```
+$ choco install annie
+```
 
 ## Getting Started
 
@@ -99,60 +110,60 @@ annie [OPTIONS] URL [URL...]
 ### Download a video
 
 ```console
-$ annie https://youtu.be/Gnbch2osEeo
+$ annie https://www.youtube.com/watch?v=dQw4w9WgXcQ
 
  Site:      YouTube youtube.com
- Title:     Multifandom Mashup 2017
+ Title:     Rick Astley - Never Gonna Give You Up (Video)
  Type:      video
- Stream:
-     [default]  -------------------
-     Quality:         hd720
-     Size:            57.97 MiB (60785404 Bytes)
-     # download with: annie -f default "URL"
+ Stream:   
+     [248]  -------------------
+     Quality:         1080p video/webm; codecs="vp9"
+     Size:            63.93 MiB (67038963 Bytes)
+     # download with: annie -f 248 ...
 
- 11.93 MiB / 57.97 MiB [======>-------------------------]  20.57% 19.03 MiB/s 2s
+ 41.88 MiB / 63.93 MiB [=================>-------------]  65.51% 4.22 MiB/s 00m05s
 ```
 
 > Note: wrap the URL in quotation marks if it contains special characters. (thanks @tonyxyl for pointing this out)
 >
 > `$ annie 'https://...'`
 
-The `-i` option displays all available quality and formats of video in the supplied link without downloading.
+The `-i` option displays all available quality of video without downloading.
 
 ```console
-$ annie -i https://youtu.be/Gnbch2osEeo
+$ annie -i https://www.youtube.com/watch?v=dQw4w9WgXcQ
 
  Site:      YouTube youtube.com
- Title:     Multifandom Mashup 2017
+ Title:     Rick Astley - Never Gonna Give You Up (Video)
  Type:      video
  Streams:   # All available quality
-     [43]  -------------------
-     Quality:         medium
-     Size:            31.95 MiB (33505824 Bytes)
-     # download with: annie -f 43 "URL"
+     [248]  -------------------
+     Quality:         1080p video/webm; codecs="vp9"
+     Size:            49.29 MiB (51687554 Bytes)
+     # download with: annie -f 248 ...
 
-     [18]  -------------------
-     Quality:         medium
-     Size:            24.81 MiB (26011062 Bytes)
-     # download with: annie -f 18 "URL"
+     [137]  -------------------
+     Quality:         1080p video/mp4; codecs="avc1.640028"
+     Size:            43.45 MiB (45564306 Bytes)
+     # download with: annie -f 137 ...
 
-     [36]  -------------------
-     Quality:         small
-     Size:            8.67 MiB (9088579 Bytes)
-     # download with: annie -f 36 "URL"
+     [398]  -------------------
+     Quality:         720p video/mp4; codecs="av01.0.05M.08"
+     Size:            37.12 MiB (38926432 Bytes)
+     # download with: annie -f 398 ...
 
-     [17]  -------------------
-     Quality:         small
-     Size:            3.10 MiB (3248257 Bytes)
-     # download with: annie -f 17 "URL"
+     [136]  -------------------
+     Quality:         720p video/mp4; codecs="avc1.4d401f"
+     Size:            31.34 MiB (32867324 Bytes)
+     # download with: annie -f 136 ...
 
-     [default]  -------------------
-     Quality:         hd720
-     Size:            57.97 MiB (60785404 Bytes)
-     # download with: annie -f default "URL"
+     [247]  -------------------
+     Quality:         720p video/webm; codecs="vp9"
+     Size:            31.03 MiB (32536181 Bytes)
+     # download with: annie -f 247 ...
 ```
 
-Use `annie -f format "URL"` to download a specific format listed in the output of `-i` option.
+Use `annie -f stream "URL"` to download a specific stream listed in the output of `-i` option.
 
 ### Download anything else
 
@@ -275,7 +286,7 @@ annie will auto retry when the download failed, you can specify the retry times 
 
 Cookies can be provided to `annie` with the `-c` option if they are required for accessing the video.
 
-**Note: cookies must match the following format:**
+Cookies can be the following format or [Netscape Cookie](https://curl.haxx.se/rfc/cookie_spec.html) format:
 
 ```console
 name=value; name2=value2; ...
@@ -413,21 +424,55 @@ The `-j` option will print the extracted data in JSON format.
 
 ```console
 $ annie -j https://www.bilibili.com/video/av20203945
+
 {
-    "Site": "哔哩哔哩 bilibili.com",
-    "Title": "【2018拜年祭单品】相遇day by day",
-    "Type": "video",
-    "Formats": {
-        "default": {
-            "URLs": [
+    "site": "哔哩哔哩 bilibili.com",
+    "title": "【2018拜年祭单品】相遇day by day",
+    "type": "video",
+    "streams": {
+        "15": {
+            "urls": [
                 {
-                    "URL": "http://cn-jszj-dx-v-11.acgvideo.com/vg1/upgcxcode/60/93/32989360/32989360-1-80.flv?expires=1522325400\u0026platform=pc\u0026ssig=5x0f9tkmvOrQBavICgRElA\u0026oi=3063167823\u0026nfa=wjcs6MVDpr+CJX9KAl+nbw==\u0026dynamic=1\u0026hfa=2022678329\u0026hfb=Yjk5ZmZjM2M1YzY4ZjAwYTMzMTIzYmIyNWY4ODJkNWI=\u0026trid=c2de1496db7646e8917f6a556668b5a9",
-                    "Size": 121735559,
-                    "Ext": "flv"
+                    "url": "...",
+                    "size": 18355205,
+                    "ext": "flv"
                 }
             ],
-            "Quality": "高清 1080P",
-            "Size": 121735559
+            "quality": "流畅 360P",
+            "size": 18355205
+        },
+        "32": {
+            "urls": [
+                {
+                    "url": "...",
+                    "size": 40058632,
+                    "ext": "flv"
+                }
+            ],
+            "quality": "清晰 480P",
+            "size": 40058632
+        },
+        "64": {
+            "urls": [
+                {
+                    "url": "...",
+                    "size": 82691087,
+                    "ext": "flv"
+                }
+            ],
+            "quality": "高清 720P",
+            "size": 82691087
+        },
+        "80": {
+            "urls": [
+                {
+                    "url": "...",
+                    "size": 121735559,
+                    "ext": "flv"
+                }
+            ],
+            "quality": "高清 1080P",
+            "size": 121735559
         }
     }
 }
@@ -448,7 +493,7 @@ $ annie -j https://www.bilibili.com/video/av20203945
 
 ```
   -f string
-    	Select specific format to download
+    	Select specific stream to download
   -p	Download playlist
   -n int
     	The number of download thread (only works for multiple-parts video) (default 10)
@@ -456,6 +501,8 @@ $ annie -j https://www.bilibili.com/video/av20203945
     	Cookie
   -r string
     	Use specified Referrer
+  -cs int
+    	HTTP chunk size for downloading (in MB) (default 0)
 ```
 
 #### Network:
@@ -466,7 +513,7 @@ $ annie -j https://www.bilibili.com/video/av20203945
   -x string
     	HTTP proxy
   -retry int
-    	How many times to retry when the download failed (default 100)
+    	How many times to retry when the download failed (default 10)
 ```
 
 #### Playlist:
@@ -499,7 +546,33 @@ $ annie -j https://www.bilibili.com/video/av20203945
 
 ```
   -ccode string
-    	Youku ccode (default "0808")
+    	Youku ccode (default "0590")
+  -ckey string
+    	Youku ckey (default "7B19C0AB12633B22E7FE81271162026020570708D6CC189E4924503C49D243A0DE6CD84A766832C2C99898FC5ED31F3709BB3CDD82C96492E721BDD381735026")
+  -password string
+    	Youku password
+```
+
+#### YouTube
+
+```
+  -ytb-stream2
+    	Use data in url_encoded_fmt_stream_map
+```
+
+#### aria2:
+
+> Note: If you use aria2 to download, you need to merge the multi-part videos yourself.
+
+```
+  -aria2
+    	Use Aria2 RPC to download
+  -aria2addr string
+    	Aria2 Address (default "localhost:6800")
+  -aria2method string
+    	Aria2 Method (default "http")
+  -aria2token string
+    	Aria2 RPC Token
 ```
 
 
@@ -524,10 +597,19 @@ Facebook | <https://facebook.com> | ✓ | | | |
 Instagram | <https://www.instagram.com> | ✓ | ✓ | | |
 Twitter | <https://twitter.com> | ✓ | | | |
 腾讯视频 | <https://v.qq.com> | ✓ | | | |
-乐视视频 | <https://www.le.com> | ✓ | | | |
+网易云音乐 | <https://music.163.com> | ✓ | | | |
+音悦台 | <https://yinyuetai.com> | ✓ | | | |
+极客时间 | <https://time.geekbang.org> | ✓ | | | |
+Pornhub | <https://pornhub.com> | ✓ | | | |
 
 
 ## Known issues
+
+### 优酷
+
+优酷的 `ccode` 经常变化导致 annie 不可用，如果你知道有新的可用的 `ccode`，可以直接使用 `annie -ccode ...` 而不用等待 annie 更新（当然，也欢迎你给我们提一个 Pull request 来更新默认的 `ccode`）
+
+最好是每次下载都附带登录过的 Cookie 以避免部分 `ccode` 的问题
 
 
 ## Contributing
@@ -538,6 +620,9 @@ Check out the [Contributing Guide](./CONTRIBUTING.md) to get started.
 
 Special thanks to [@Yasujizr](https://github.com/Yasujizr) who designed the amazing logo!
 
+Thanks for [JetBrains](https://www.jetbrains.com/?from=annie) for the wonderful IDE.
+
+<a href="https://www.jetbrains.com/?from=annie"><img src="static/jetbrains-variant-3.svg" /></a>
 
 ## Authors
 
@@ -548,6 +633,7 @@ Code with ❤️ by [iawia002](https://github.com/iawia002) and lovely [contribu
 
 * [youtube-dl](https://github.com/rg3/youtube-dl)
 * [you-get](https://github.com/soimort/you-get)
+* [ytdl](https://github.com/rylio/ytdl)
 
 
 ## License
