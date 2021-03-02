@@ -24,29 +24,45 @@
 
 👾 Annie is a fast, simple and clean video downloader built with Go.
 
-* [Installation](#installation)
-* [Getting Started](#getting-started)
-  * [Download a video](#download-a-video)
-  * [Download anything else](#download-anything-else)
-  * [Download playlist](#download-playlist)
-  * [Multiple inputs](#multiple-inputs)
-  * [Resume a download](#resume-a-download)
-  * [Cookies](#cookies)
-  * [Auto retry](#auto-retry)
-  * [Proxy](#proxy)
-  * [Multi-Thread](#multi-thread)
-  * [Short link](#short-link)
-  * [Use specified Referrer](#use-specified-referrer)
-  * [Specify the output path and name](#specify-the-output-path-and-name)
-  * [Debug Mode](#debug-mode)
-  * [Reuse extracted data](#reuse-extracted-data)
-  * [Options](#options)
-* [Supported Sites](#supported-sites)
-* [Known issues](#known-issues)
-* [Contributing](#contributing)
-* [Authors](#authors)
-* [Similar projects](#similar-projects)
-* [License](#license)
+- [Installation](#installation)
+  - [Prerequisites](#prerequisites)
+  - [Install via `go get`](#install-via-go-get)
+  - [Homebrew (macOS only)](#homebrew-macos-only)
+  - [Arch Linux](#arch-linux)
+  - [Void Linux](#void-linux)
+  - [Scoop on Windows](#scoop-on-windows)
+  - [Chocolatey on Windows](#chocolatey-on-windows)
+- [Getting Started](#getting-started)
+  - [Download a video](#download-a-video)
+  - [Download anything else](#download-anything-else)
+  - [Download playlist](#download-playlist)
+  - [Multiple inputs](#multiple-inputs)
+  - [Resume a download](#resume-a-download)
+  - [Auto retry](#auto-retry)
+  - [Cookies](#cookies)
+  - [Proxy](#proxy)
+  - [Multi-Thread](#multi-thread)
+  - [Short link](#short-link)
+    - [bilibili](#bilibili)
+  - [Use specified Referrer](#use-specified-referrer)
+  - [Specify the output path and name](#specify-the-output-path-and-name)
+  - [Debug Mode](#debug-mode)
+  - [Reuse extracted data](#reuse-extracted-data)
+  - [Options](#options)
+    - [Download:](#download)
+    - [Network:](#network)
+    - [Playlist:](#playlist)
+    - [Filesystem:](#filesystem)
+    - [Subtitle:](#subtitle)
+    - [Youku:](#youku)
+    - [aria2:](#aria2)
+- [Supported Sites](#supported-sites)
+- [Known issues](#known-issues)
+  - [优酷](#优酷)
+- [Contributing](#contributing)
+- [Authors](#authors)
+- [Similar projects](#similar-projects)
+- [License](#license)
 
 
 ## Installation
@@ -64,7 +80,7 @@ The following dependencies are required and must be installed separately.
 To install Annie, use `go get`, or download the binary file from [Releases](https://github.com/iawia002/annie/releases) page.
 
 ```bash
-$ go get github.com/iawia002/annie
+$ GO111MODULE=on go get github.com/iawia002/annie
 ```
 
 ### Homebrew (macOS only)
@@ -220,9 +236,16 @@ You can use the `-start`, `-end` or `-items` option to specify the download rang
 -start
     	Playlist video to start at (default 1)
 -end
-    	Playlist video to end at (default is last)
+    	Playlist video to end at
 -items
-    	Playlist video items to download. Separated by commas like: 1,5,6
+    	Playlist video items to download. Separated by commas like: 1,5,6,8-10
+```
+
+For bilibili playlists only:
+
+```
+-eto
+  File name of each bilibili episode doesn't include the playlist title
 ```
 
 ### Multiple inputs
@@ -272,6 +295,17 @@ $ annie -F ~/Desktop/u.txt
 ......
 ```
 
+You can use the `-start`, `-end` or `-items` option to specify the download range of the list:
+
+```
+-start
+    	File line to start at (default 1)
+-end
+    	File line to end at
+-items
+    	File lines to download. Separated by commas like: 1,5,6,8-10
+```
+
 ### Resume a download
 
 <kbd>Ctrl</kbd>+<kbd>C</kbd> interrupts a download.
@@ -306,23 +340,20 @@ As a text file:
 $ annie -c cookies.txt https://www.bilibili.com/video/av20203945
 ```
 
+If the `-c` is not set, `annie` will try to get the cookies from the current user's Chrome or Edge automatically.
+To use this feature, you need to shutdown your Chrome or Edge for only one time and let `annie` launch the browser for you.
+
 ### Proxy
-#### HTTP proxy
 
-An HTTP proxy can be specified with the `-x` option:
-
-```console
-$ annie -x http://127.0.0.1:7777 -i https://www.youtube.com/watch?v=Gnbch2osEeo
-```
-
-#### SOCKS5 proxy
-
-A SOCKS5 proxy can be specified with the `-s` option:
+You can set the HTTP/SOCKS5 proxy using environment variables:
 
 ```console
-$ annie -s 127.0.0.1:1080 -i https://www.youtube.com/watch?v=Gnbch2osEeo
+$ HTTP_PROXY="http://127.0.0.1:1087/" annie -i https://www.youtube.com/watch?v=Gnbch2osEeo
 ```
 
+```console
+$ HTTP_PROXY="socks5://127.0.0.1:1080/" annie -i https://www.youtube.com/watch?v=Gnbch2osEeo
+```
 
 ### Multi-Thread
 
@@ -508,10 +539,6 @@ $ annie -j https://www.bilibili.com/video/av20203945
 #### Network:
 
 ```
-  -s string
-    	SOCKS5 proxy
-  -x string
-    	HTTP proxy
   -retry int
     	How many times to retry when the download failed (default 10)
 ```
@@ -524,7 +551,7 @@ $ annie -j https://www.bilibili.com/video/av20203945
   -end int
     	Playlist video to end at
   -items string
-    	Playlist video items to download. Separated by commas like: 1,5,6
+    	Playlist video items to download. Separated by commas like: 1,5,6,8-10
 ```
 
 #### Filesystem:
@@ -551,13 +578,6 @@ $ annie -j https://www.bilibili.com/video/av20203945
     	Youku ckey (default "7B19C0AB12633B22E7FE81271162026020570708D6CC189E4924503C49D243A0DE6CD84A766832C2C99898FC5ED31F3709BB3CDD82C96492E721BDD381735026")
   -password string
     	Youku password
-```
-
-#### YouTube
-
-```
-  -ytb-stream2
-    	Use data in url_encoded_fmt_stream_map
 ```
 
 #### aria2:
@@ -588,6 +608,7 @@ pixivision | <https://www.pixivision.net> | | ✓ | | |
 YouTube | <https://www.youtube.com> | ✓ | | ✓ | |
 爱奇艺 | <https://www.iqiyi.com> | ✓ | | | |
 芒果TV | <https://www.mgtv.com> | ✓ | | | |
+糖豆广场舞 | <http://www.tangdou.com> | ✓ | | ✓ | |
 Tumblr | <https://www.tumblr.com> | ✓ | ✓ | | |
 Vimeo | <https://vimeo.com> | ✓ | | | |
 Facebook | <https://facebook.com> | ✓ | | | |
@@ -601,6 +622,11 @@ Twitter | <https://twitter.com> | ✓ | | | |
 音悦台 | <https://yinyuetai.com> | ✓ | | | |
 极客时间 | <https://time.geekbang.org> | ✓ | | | |
 Pornhub | <https://pornhub.com> | ✓ | | | |
+XVIDEOS | <https://xvideos.com> | ✓ | | | |
+聯合新聞網 | <https://udn.com> | ✓ | | | |
+TikTok | <https://www.tiktok.com> | ✓ | | | |
+好看视频 | <https://haokan.baidu.com> | ✓ | | | |
+AcFun | <https://www.acfun.cn> | ✓ | | ✓ | |
 
 
 ## Known issues

@@ -1,8 +1,12 @@
 package utils
 
 import (
+	"bufio"
+	"bytes"
 	"crypto/md5"
+	"errors"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -12,13 +16,16 @@ import (
 	"strings"
 
 	"github.com/fatih/color"
+	"github.com/tidwall/gjson"
 
 	"github.com/iawia002/annie/config"
 	"github.com/iawia002/annie/request"
 )
 
-// MAXLENGTH Maximum length of file name
-const MAXLENGTH = 80
+// GetStringFromJSON get the string value from json path
+func GetStringFromJSON(json, path string) string {
+	return gjson.Get(json, path).String()
+}
 
 // MatchOneOf match one of the patterns
 func MatchOneOf(text string, patterns ...string) []string {
@@ -68,11 +75,16 @@ func Domain(url string) string {
 	if domain != nil {
 		return domain[1]
 	}
-	return "Universal"
+	return ""
 }
 
 // LimitLength Handle overly long strings
 func LimitLength(s string, length int) string {
+	// 0 means unlimited
+	if length == 0 {
+		return s
+	}
+
 	const ELLIPSES = "..."
 	str := []rune(s)
 	if len(str) > length {
@@ -82,30 +94,78 @@ func LimitLength(s string, length int) string {
 }
 
 // FileName Converts a string to a valid filename
-func FileName(name string) string {
+func FileName(name, ext string, length int) string {
 	rep := strings.NewReplacer("\n", " ", "/", " ", "|", "-", ": ", "：", ":", "：", "'", "’")
 	name = rep.Replace(name)
 	if runtime.GOOS == "windows" {
 		rep = strings.NewReplacer("\"", " ", "?", " ", "*", " ", "\\", " ", "<", " ", ">", " ")
 		name = rep.Replace(name)
 	}
-	return LimitLength(name, MAXLENGTH)
+	limitedName := LimitLength(name, length)
+	if ext == "" {
+		return limitedName
+	}
+	return fmt.Sprintf("%s.%s", limitedName, ext)
 }
 
 // FilePath gen valid file path
-func FilePath(name, ext string, escape bool) (string, error) {
-	var outputPath string
-	if config.OutputPath != "" {
-		if _, err := os.Stat(config.OutputPath); err != nil {
+func FilePath(name, ext string, length int, outputPath string, escape bool) (string, error) {
+	if outputPath != "" {
+		if _, err := os.Stat(outputPath); err != nil {
 			return "", err
 		}
 	}
-	fileName := fmt.Sprintf("%s.%s", name, ext)
+	var fileName string
 	if escape {
-		fileName = FileName(fileName)
+		fileName = FileName(name, ext, length)
+	} else {
+		fileName = fmt.Sprintf("%s.%s", name, ext)
 	}
-	outputPath = filepath.Join(config.OutputPath, fileName)
-	return outputPath, nil
+	return filepath.Join(outputPath, fileName), nil
+}
+
+// FileLineCounter Counts line in file
+func FileLineCounter(r io.Reader) (int, error) {
+	buf := make([]byte, 32*1024)
+	count := 0
+	lineSep := []byte{'\n'}
+
+	for {
+		c, err := r.Read(buf)
+		count += bytes.Count(buf[:c], lineSep)
+
+		switch {
+		case err == io.EOF:
+			return count, nil
+
+		case err != nil:
+			return count, err
+		}
+	}
+}
+
+// ParseInputFile Parses input file into args
+func ParseInputFile(r io.Reader, items string, itemStart, itemEnd int) []string {
+	scanner := bufio.NewScanner(r)
+
+	temp := make([]string, 0)
+	totalLines := 0
+	for scanner.Scan() {
+		totalLines++
+		universalURL := strings.TrimSpace(scanner.Text())
+		temp = append(temp, universalURL)
+	}
+
+	wantedItems := NeedDownloadList(items, itemStart, itemEnd, totalLines)
+
+	itemList := make([]string, 0, len(wantedItems))
+	for i, item := range temp {
+		if ItemInSlice(i, wantedItems) {
+			itemList = append(itemList, item)
+		}
+	}
+
+	return itemList
 }
 
 // ItemInSlice if a item is in the list
@@ -157,12 +217,16 @@ func GetNameAndExt(uri string) (string, string, error) {
 // Md5 md5 hash
 func Md5(text string) string {
 	sign := md5.New()
-	sign.Write([]byte(text))
+	sign.Write([]byte(text)) // nolint
 	return fmt.Sprintf("%x", sign.Sum(nil))
 }
 
 // M3u8URLs get all urls from m3u8 url
 func M3u8URLs(uri string) ([]string, error) {
+	if len(uri) == 0 {
+		return nil, errors.New("url is null")
+	}
+
 	html, err := request.Get(uri, "", nil)
 	if err != nil {
 		return nil, err
@@ -183,7 +247,7 @@ func M3u8URLs(uri string) ([]string, error) {
 				if err != nil {
 					continue
 				}
-				urls = append(urls, fmt.Sprintf("%s", base.ResolveReference(u)))
+				urls = append(urls, base.ResolveReference(u).String())
 			}
 		}
 	}
@@ -194,7 +258,8 @@ func M3u8URLs(uri string) ([]string, error) {
 func PrintVersion() {
 	blue := color.New(color.FgBlue)
 	cyan := color.New(color.FgCyan)
-	fmt.Printf(
+	fmt.Fprintf(
+		color.Output,
 		"\n%s: version %s, A fast, simple and clean video downloader.\n\n",
 		cyan.Sprintf("annie"),
 		blue.Sprintf(config.VERSION),

@@ -14,8 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/iawia002/annie/config"
-	"github.com/iawia002/annie/downloader"
+	"github.com/iawia002/annie/extractors/types"
 	"github.com/iawia002/annie/request"
 	"github.com/iawia002/annie/utils"
 )
@@ -78,68 +77,75 @@ func getAudioLang(lang string) string {
 
 // var ccodes = []string{"0510", "0502", "0507", "0508", "0512", "0513", "0514", "0503", "0590"}
 
-func youkuUps(vid string) (youkuData, error) {
+func youkuUps(vid string, option types.Options) (*youkuData, error) {
 	var (
-		url  string
-		utid string
-		html string
-		data youkuData
-		err  error
+		url   string
+		utid  string
+		utids []string
+		data  youkuData
 	)
-	if strings.Contains(config.Cookie, "cna") {
-		utid = utils.MatchOneOf(config.Cookie, `cna=(.+?);`, `cna\s+(.+?)\s`, `cna\s+(.+?)$`)[1]
+	if strings.Contains(option.Cookie, "cna") {
+		utids = utils.MatchOneOf(option.Cookie, `cna=(.+?);`, `cna\s+(.+?)\s`, `cna\s+(.+?)$`)
+
 	} else {
 		headers, err := request.Headers("http://log.mmstat.com/eg.js", youkuReferer)
 		if err != nil {
-			return youkuData{}, err
+			return nil, err
 		}
 		setCookie := headers.Get("Set-Cookie")
-		utid = utils.MatchOneOf(setCookie, `cna=(.+?);`)[1]
+		utids = utils.MatchOneOf(setCookie, `cna=(.+?);`)
 	}
+	if utids == nil || len(utids) < 2 {
+		return nil, types.ErrURLParseFailed
+	}
+	utid = utids[1]
+
 	// https://g.alicdn.com/player/ykplayer/0.5.61/youku-player.min.js
 	// grep -oE '"[0-9a-zA-Z+/=]{256}"' youku-player.min.js
-	for _, ccode := range []string{config.YoukuCcode} {
+	for _, ccode := range []string{option.YoukuCcode} {
 		if ccode == "0103010102" {
 			utid = generateUtdid()
 		}
 		url = fmt.Sprintf(
 			"https://ups.youku.com/ups/get.json?vid=%s&ccode=%s&client_ip=192.168.1.1&client_ts=%d&utid=%s&ckey=%s",
-			vid, ccode, time.Now().Unix()/1000, netURL.QueryEscape(utid), netURL.QueryEscape(config.YoukuCkey),
+			vid, ccode, time.Now().Unix()/1000, netURL.QueryEscape(utid), netURL.QueryEscape(option.YoukuCkey),
 		)
-		if config.YoukuPassword != "" {
-			url = fmt.Sprintf("%s&password=%s", url, config.YoukuPassword)
+		if option.YoukuPassword != "" {
+			url = fmt.Sprintf("%s&password=%s", url, option.YoukuPassword)
 		}
-		html, err = request.Get(url, youkuReferer, nil)
+		html, err := request.GetByte(url, youkuReferer, nil)
 		if err != nil {
-			return youkuData{}, err
+			return nil, err
 		}
 		// data must be emptied before reassignment, otherwise it will contain the previous value(the 'error' data)
 		data = youkuData{}
-		json.Unmarshal([]byte(html), &data)
+		if err = json.Unmarshal(html, &data); err != nil {
+			return nil, err
+		}
 		if data.Data.Error == (errorData{}) {
-			return data, nil
+			return &data, nil
 		}
 	}
-	return data, nil
+	return &data, nil
 }
 
 func getBytes(val int32) []byte {
 	var buff bytes.Buffer
-	binary.Write(&buff, binary.BigEndian, val)
+	binary.Write(&buff, binary.BigEndian, val) // nolint
 	return buff.Bytes()
 }
 
 func hashCode(s string) int32 {
 	var result int32
 	for _, c := range s {
-		result = result*0x1f + int32(c)
+		result = result*0x1f + c
 	}
 	return result
 }
 
 func hmacSha1(key []byte, msg []byte) []byte {
 	mac := hmac.New(sha1.New, key)
-	mac.Write([]byte(msg))
+	mac.Write(msg) // nolint
 	return mac.Sum(nil)
 }
 
@@ -157,12 +163,12 @@ func generateUtdid() string {
 	return base64.StdEncoding.EncodeToString(buffer.Bytes())
 }
 
-func genData(youkuData data) map[string]downloader.Stream {
+func genData(youkuData data) map[string]*types.Stream {
 	var (
 		streamString string
 		quality      string
 	)
-	streams := map[string]downloader.Stream{}
+	streams := make(map[string]*types.Stream, len(youkuData.Stream))
 	for _, stream := range youkuData.Stream {
 		if stream.AudioLang == "default" {
 			streamString = stream.Type
@@ -181,16 +187,16 @@ func genData(youkuData data) map[string]downloader.Stream {
 			strings.Split(stream.Segs[0].URL, "?")[0],
 			".",
 		)
-		urls := make([]downloader.URL, len(stream.Segs))
+		urls := make([]*types.Part, len(stream.Segs))
 		for index, data := range stream.Segs {
-			urls[index] = downloader.URL{
+			urls[index] = &types.Part{
 				URL:  data.URL,
 				Size: data.Size,
 				Ext:  ext[len(ext)-1],
 			}
 		}
-		streams[streamString] = downloader.Stream{
-			URLs:    urls,
+		streams[streamString] = &types.Stream{
+			Parts:   urls,
 			Size:    stream.Size,
 			Quality: quality,
 		}
@@ -198,17 +204,29 @@ func genData(youkuData data) map[string]downloader.Stream {
 	return streams
 }
 
-// Extract is the main function for extracting data
-func Extract(url string) ([]downloader.Data, error) {
-	vid := utils.MatchOneOf(
+type extractor struct{}
+
+// New returns a youtube extractor.
+func New() types.Extractor {
+	return &extractor{}
+}
+
+// Extract is the main function to extract the data.
+func (e *extractor) Extract(url string, option types.Options) ([]*types.Data, error) {
+	vids := utils.MatchOneOf(
 		url, `id_(.+?)\.html`, `id_(.+)`,
-	)[1]
-	youkuData, err := youkuUps(vid)
+	)
+	if vids == nil || len(vids) < 2 {
+		return nil, types.ErrURLParseFailed
+	}
+	vid := vids[1]
+
+	youkuData, err := youkuUps(vid, option)
 	if err != nil {
-		return downloader.EmptyList, err
+		return nil, err
 	}
 	if youkuData.Data.Error.Code != 0 {
-		return downloader.EmptyList, errors.New(youkuData.Data.Error.Note)
+		return nil, errors.New(youkuData.Data.Error.Note)
 	}
 	streams := genData(youkuData.Data)
 	var title string
@@ -220,11 +238,11 @@ func Extract(url string) ([]downloader.Data, error) {
 		title = fmt.Sprintf("%s %s", youkuData.Data.Show.Title, youkuData.Data.Video.Title)
 	}
 
-	return []downloader.Data{
+	return []*types.Data{
 		{
 			Site:    "优酷 youku.com",
 			Title:   title,
-			Type:    "video",
+			Type:    types.DataTypeVideo,
 			Streams: streams,
 			URL:     url,
 		},

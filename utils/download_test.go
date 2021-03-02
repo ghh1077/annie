@@ -3,8 +3,6 @@ package utils
 import (
 	"reflect"
 	"testing"
-
-	"github.com/iawia002/annie/config"
 )
 
 func TestNeedDownloadList(t *testing.T) {
@@ -62,13 +60,34 @@ func TestNeedDownloadList(t *testing.T) {
 			items: "1, 3",
 			want:  []int{1, 3},
 		},
+		{
+			name: "from to item selection 1",
+			args: args{
+				len: 10,
+			},
+			items: "1-3, 5, 7-8, 10",
+			want:  []int{1, 2, 3, 5, 7, 8, 10},
+		},
+		{
+			name: "from to item selection 2",
+			args: args{
+				len: 10,
+			},
+			items: "1,2, 4 , 5, 7-8  , 10",
+			want:  []int{1, 2, 4, 5, 7, 8, 10},
+		},
+		{
+			name: "from to item selection 3",
+			args: args{
+				len: 10,
+			},
+			items: "5-1, 2",
+			want:  []int{2},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config.PlaylistStart = tt.start
-			config.PlaylistEnd = tt.end
-			config.PlaylistItems = tt.items
-			if got := NeedDownloadList(tt.args.len); !reflect.DeepEqual(got, tt.want) {
+			if got := NeedDownloadList(tt.items, tt.start, tt.end, tt.args.len); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("NeedDownloadList() = %v, want %v", got, tt.want)
 			}
 		})

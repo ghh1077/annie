@@ -1,70 +1,117 @@
 package pornhub
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"strings"
 
-	"github.com/iawia002/annie/downloader"
+	"github.com/iawia002/annie/extractors/types"
 	"github.com/iawia002/annie/request"
 	"github.com/iawia002/annie/utils"
+
+	"github.com/robertkrimen/otto"
 )
 
 type pornhubData struct {
-	Format   string `json:"format"`
-	Quality  string `json:"quality"`
-	VideoURL string `json:"videoUrl"`
+	Format   string          `json:"format"`
+	Quality  json.RawMessage `json:"quality"`
+	VideoURL string          `json:"videoUrl"`
 }
 
-// Extract is the main function for extracting data
-func Extract(url string) ([]downloader.Data, error) {
-	var err error
+type extractor struct{}
+
+// New returns a youtube extractor.
+func New() types.Extractor {
+	return &extractor{}
+}
+
+// Extract is the main function to extract the data.
+func (e *extractor) Extract(url string, option types.Options) ([]*types.Data, error) {
 	html, err := request.Get(url, url, nil)
 	if err != nil {
-		return downloader.EmptyList, err
+		return nil, err
 	}
+
 	var title string
 	desc := utils.MatchOneOf(html, `<span class="inlineFree">(.+?)</span>`)
-	if desc != nil {
+	if len(desc) > 1 {
 		title = desc[1]
 	} else {
 		title = "pornhub video"
 	}
 
 	realURLs := utils.MatchOneOf(html, `"mediaDefinitions":(.+?),"isVertical"`)
-
-	var pornhubs []pornhubData
-	err = json.Unmarshal([]byte(realURLs[1]), &pornhubs)
-	if err != nil {
-		return downloader.EmptyList, err
+	if realURLs == nil || len(realURLs) < 2 {
+		return nil, types.ErrURLParseFailed
 	}
 
-	streams := make(map[string]downloader.Stream, len(pornhubs))
-	for _, data := range pornhubs {
-		realURL := data.VideoURL
-		if realURL == "" {
+	var pornhubs []pornhubData
+	if err = json.Unmarshal([]byte(realURLs[1]), &pornhubs); err != nil {
+		return nil, err
+	}
+
+	scripts := utils.MatchAll(html, `<script type="text/javascript">(?s)(.+?)</script>`)
+	var flashvarJS string
+	for _, s := range scripts {
+		for _, js := range s[1:] {
+			if strings.Contains(js, "flashvars_") {
+				flashvarJS = js
+				break
+			}
+		}
+	}
+	vm := otto.New()
+	vm.Run(flashvarJS) // nolint
+	var urls []string
+	for i := 0; i < len(pornhubs); i++ {
+		if value, err := vm.Get(fmt.Sprintf("media_%d", i)); err == nil {
+			urls = append(urls, value.String())
+		}
+	}
+
+	streams := make(map[string]*types.Stream, len(pornhubs))
+	for i, data := range pornhubs {
+		if data.Format != "mp4" {
+			continue
+		}
+
+		if bytes.ContainsRune(data.Quality, '[') {
+			// skip the case where the quality value is an array
+			// "quality": [
+			//   720,
+			//   480,
+			//   240
+			// ]
+			continue
+		}
+		quality := string(data.Quality)
+
+		realURL := urls[i]
+		if len(realURL) == 0 {
 			continue
 		}
 		size, err := request.Size(realURL, url)
 		if err != nil {
-			return downloader.EmptyList, err
+			return nil, err
 		}
-		urlData := downloader.URL{
+		urlData := &types.Part{
 			URL:  realURL,
 			Size: size,
 			Ext:  "mp4",
 		}
-		streams[data.Quality] = downloader.Stream{
-			URLs:    []downloader.URL{urlData},
+		streams[quality] = &types.Stream{
+			Parts:   []*types.Part{urlData},
 			Size:    size,
-			Quality: fmt.Sprintf("%sP", data.Quality),
+			Quality: fmt.Sprintf("%sP", quality),
 		}
 	}
 
-	return []downloader.Data{
+	return []*types.Data{
 		{
 			Site:    "Pornhub pornhub.com",
 			Title:   title,
-			Type:    "video",
+			Type:    types.DataTypeVideo,
 			Streams: streams,
 			URL:     url,
 		},
